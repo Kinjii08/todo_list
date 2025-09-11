@@ -4,14 +4,14 @@ class TaskItem extends StatefulWidget {
   final String title;
   final VoidCallback? onDelete;
   final void Function(String)? onEdit;
-  final void Function(bool)? onFinished;
+  final VoidCallback? onChangeState;
   final bool isDone;
   const TaskItem({
     super.key,
     required this.title,
     this.onDelete,
     this.onEdit,
-    this.onFinished,
+    this.onChangeState,
     required this.isDone,
   });
 
@@ -59,6 +59,7 @@ class _TaskItemState extends State<TaskItem> {
 
   @override
   Widget build(BuildContext context) {
+    print(widget.title);
     return GestureDetector(
       onLongPress: () => {if (widget.isDone == false) _openEditDialog()},
       child: Card(
@@ -105,7 +106,7 @@ class _TaskItemState extends State<TaskItem> {
                 activeColor: Theme.of(context).colorScheme.onTertiaryContainer,
                 key: ValueKey(widget.title),
                 value: widget.isDone,
-                onChanged: (_) => widget.onFinished!(!widget.isDone),
+                onChanged: (_) => widget.onChangeState!(),
               ),
             ),
           ),
