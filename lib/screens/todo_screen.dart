@@ -1,7 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:todo_list/models/task.dart';
 import 'package:todo_list/widgets/task_item.dart';
 import 'package:todo_list/widgets/days_list.dart';
 
@@ -14,12 +14,13 @@ class TodoScreen extends StatefulWidget {
 
 class _TodoScreenState extends State<TodoScreen> {
   final GlobalKey<DaysListState> _weekKey = GlobalKey<DaysListState>();
-  Map<String, dynamic> _dailyTasks = {};
   late TextEditingController _controller;
   bool _isDateRowMiddle = true;
   final String _now = DateFormat.yMd().format(DateTime.now());
   String _currentDateSelected = DateFormat.yMd().format(DateTime.now());
   bool _isCalendarSelection = false;
+  bool _isInCalendarSelectionRange = false;
+  final tasksBox = Hive.box<Task>('tasks');
 
   @override
   void initState() {
@@ -33,51 +34,52 @@ class _TodoScreenState extends State<TodoScreen> {
     super.dispose();
   }
 
-  void _addTask(String name) {
-    if (_dailyTasks.isEmpty || !_dailyTasks.containsKey(_currentDateSelected)) {
-      _dailyTasks.putIfAbsent(_currentDateSelected, () => {"tasks": []});
-    }
-    setState(() {
-      _dailyTasks[_currentDateSelected]!["tasks"]!.add({
-        'id': Random().nextInt(99) + 1,
-        "title": name,
-        "isDone": false,
-      });
-    });
+  void _addTask(String name) async {
+    await tasksBox.add(
+      Task(
+        DateTime.now().millisecondsSinceEpoch,
+        title: name,
+        date: _currentDateSelected,
+      ),
+    );
   }
 
-  void _removeTask(int index) {
-    setState(() {
-      _dailyTasks[_currentDateSelected]!["tasks"]!.removeWhere(
-        (t) => t["id"] == index,
-      );
-    });
+  void _removeTask(int id) async {
+    final task = tasksBox.values.firstWhere((t) => t.id == id);
+    await task.delete();
   }
 
-  void _updateTask(int id, String name) {
-    var tasks =
-        (_dailyTasks[_currentDateSelected]!["tasks"] as List)
-            .cast<Map<String, Object>>();
-    setState(() {
-      for (var task in tasks) {
-        if (task["id"] == id) {
-          task["title"] = name;
-          break;
-        }
-      }
-    });
-    _dailyTasks = Map.from(_dailyTasks);
+  void _updateTask(int id, String name) async {
+    final task = tasksBox.values.firstWhere((t) => t.id == id);
+
+    task.title = name;
+    await task.save();
   }
 
-  void _changeTaskState(int id) {
-    print(_dailyTasks[_currentDateSelected]!["tasks"] as List);
-    int index = (_dailyTasks[_currentDateSelected]!["tasks"] as List)
-        .indexWhere((task) => (task['id'] as int) == id);
-    print(index);
+  void _changeTaskState(int id) async {
+    final task = tasksBox.values.firstWhere((t) => t.id == id);
+
+    task.isDone = !task.isDone;
+    await task.save();
+  }
+
+  List<Task> _getFinishedTasksList(List<Task> tasks) {
+    return tasks
+        .where((t) => t.isDone == true && t.date == _currentDateSelected)
+        .toList();
+  }
+
+  List<Task> _getTasksList(List<Task> tasks) {
+    return tasks
+        .where((t) => t.isDone == false && t.date == _currentDateSelected)
+        .toList();
+  }
+
+  void _scrollToMiddle() {
     setState(() {
-      _dailyTasks[_currentDateSelected]!["tasks"]![index]['isDone'] =
-          !_dailyTasks[_currentDateSelected]!["tasks"]![index]['isDone'];
+      _isDateRowMiddle = true;
     });
+    _weekKey.currentState?.scrollToMiddle();
   }
 
   Future<String?> _openDialog() => showDialog<String>(
@@ -112,41 +114,19 @@ class _TodoScreenState extends State<TodoScreen> {
       firstDate: DateTime(2021),
       lastDate: DateTime(2032),
     );
+    if (pickedDate == null) return;
     setState(() {
-      _currentDateSelected = DateFormat.yMd().format(pickedDate!);
+      _currentDateSelected = DateFormat.yMd().format(pickedDate);
       _isCalendarSelection = true;
+      _isInCalendarSelectionRange = true;
       _isDateRowMiddle = false;
     });
+    _weekKey.currentState?.createDaysList(DateFormat.yMd().format(pickedDate));
+    _weekKey.currentState?.initMiddleScroll();
   }
 
   @override
   Widget build(BuildContext context) {
-    print(_dailyTasks);
-    print(_dailyTasks[_currentDateSelected]?['tasks']);
-    bool isTasksEmpty =
-        _dailyTasks[_currentDateSelected]?['tasks'] != null
-            ? (_dailyTasks[_currentDateSelected]!['tasks'] as List).any(
-              (t) => !(t as Map<String, dynamic>)['isDone'],
-            )
-            : false;
-    bool isFinishedTasksEmpty =
-        _dailyTasks[_currentDateSelected]?['tasks'] != null
-            ? (_dailyTasks[_currentDateSelected]!['tasks'] as List).any(
-              (t) => (t as Map<String, dynamic>)['isDone'],
-            )
-            : false;
-    var finishedTasks =
-        _dailyTasks[_currentDateSelected]?['tasks'] != null
-            ? (_dailyTasks[_currentDateSelected]?['tasks'] as List)
-                .where((t) => (t as Map<String, dynamic>)['isDone'] == true)
-                .toList()
-            : [];
-    var tasks =
-        _dailyTasks[_currentDateSelected]?['tasks'] != null
-            ? (_dailyTasks[_currentDateSelected]!['tasks'] as List)
-                .where((t) => (t as Map<String, dynamic>)['isDone'] == false)
-                .toList()
-            : [];
     return Scaffold(
       drawer: Drawer(),
       appBar: AppBar(
@@ -159,118 +139,144 @@ class _TodoScreenState extends State<TodoScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Today's",
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 26.0,
-              ),
+      body: ValueListenableBuilder(
+        valueListenable: Hive.box<Task>('tasks').listenable(),
+        builder: (context, Box<Task> box, _) {
+          final tasks = box.values.toList().cast<Task>();
+          List<Task> tasksList = _getTasksList(tasks);
+          var finishedTasksList = _getFinishedTasksList(tasks);
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
             ),
-            Text(
-              "Schedule",
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-                fontSize: 26.0,
-              ),
-            ),
-            SizedBox(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _getCurentDate(),
+                  "Today's",
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 16.0,
+                    fontSize: 26.0,
                   ),
                 ),
-                !_isDateRowMiddle
-                    ? GestureDetector(
-                      onTap:
-                          () => {
-                            setState(() {
-                              _isCalendarSelection = false;
-                              _currentDateSelected = _now;
-                            }),
-                            // _scrollToMiddle(),
-                          },
-                      child: Text("Current day"),
+                Text(
+                  "Schedule",
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 26.0,
+                  ),
+                ),
+                SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _getCurentDate(),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 16.0,
+                      ),
+                    ),
+                    !_isDateRowMiddle || _currentDateSelected != _now
+                        ? GestureDetector(
+                          onTap:
+                              () => {
+                                if (_currentDateSelected != _now &&
+                                    _isInCalendarSelectionRange)
+                                  {
+                                    setState(() {
+                                      _currentDateSelected = _now;
+                                      _weekKey.currentState?.createDaysList(
+                                        _now,
+                                      );
+                                      _weekKey.currentState?.initMiddleScroll();
+                                      _isCalendarSelection = false;
+                                      _isInCalendarSelectionRange = false;
+                                      _isDateRowMiddle = true;
+                                    }),
+                                  }
+                                else
+                                  {
+                                    setState(() {
+                                      _isCalendarSelection = false;
+                                    }),
+                                    _scrollToMiddle(),
+                                  },
+                              },
+                          child: Text("Current day"),
+                        )
+                        : Container(),
+                  ],
+                ),
+                SizedBox(height: 16),
+                DaysList(
+                  key: _weekKey,
+                  tasks: tasks,
+                  selectedDate: _currentDateSelected,
+                  isCalendarSelection: _isCalendarSelection,
+                  onNotMiddle: (newValue) {
+                    setState(() {
+                      _isDateRowMiddle = newValue;
+                    });
+                  },
+                  onSelectDate: (newSelectedDate, newValue) {
+                    setState(() {
+                      _currentDateSelected = newSelectedDate;
+                      _isCalendarSelection = newValue;
+                    });
+                  },
+                ),
+                tasksList.isNotEmpty
+                    ? Expanded(
+                      child: ListView.separated(
+                        itemCount: tasksList.length,
+                        itemBuilder: (context, index) {
+                          final t = tasksList[index];
+                          return TaskItem(
+                            key: ValueKey('$_currentDateSelected${t.title}'),
+                            title: t.title,
+                            isDone: t.isDone,
+                            onEdit: (newValue) => _updateTask(t.id, newValue),
+                            onDelete: () => _removeTask(t.id),
+                            onChangeState: () => _changeTaskState(t.id),
+                          );
+                        },
+                        separatorBuilder:
+                            (context, index) => SizedBox(height: 10),
+                      ),
                     )
-                    : Container(),
+                    : Center(child: Text("Aucune tâche")),
+
+                finishedTasksList.isNotEmpty
+                    ? Text("Finished tasks")
+                    : SizedBox(),
+                SizedBox(height: 16),
+                finishedTasksList.isNotEmpty
+                    ? Expanded(
+                      child: ListView.separated(
+                        itemCount: finishedTasksList.length,
+                        itemBuilder: (context, index) {
+                          final ft = finishedTasksList[index];
+                          return TaskItem(
+                            key: ValueKey('$_currentDateSelected${ft.title}'),
+                            title: ft.title,
+                            isDone: ft.isDone,
+                            onDelete: () => _removeTask(ft.id),
+                            onChangeState: () => _changeTaskState(ft.id),
+                          );
+                        },
+                        separatorBuilder:
+                            (context, index) => SizedBox(height: 10),
+                      ),
+                    )
+                    : Center(),
               ],
             ),
-            // Text(_isCalendarSelection.toString()),
-            // DaysList(R
-            //   key: _weekKey,
-            //   tasks: _dailyTasks,
-            //   selectedDate: _currentDateSelected,
-            //   isCalendarSelection: _isCalendarSelection,
-            //   onNotMiddle: (newValue) {
-            //     setState(() {
-            //       _isDateRowMiddle = newValue;
-            //     });
-            //   },
-            //   onSelectDate: (newSelectedDate, newValue) {
-            //     setState(() {
-            //       _currentDateSelected = newSelectedDate;
-            //       _isCalendarSelection = newValue;
-            //     });
-            //   },
-            // ),
-            SizedBox(height: 16),
-            isTasksEmpty
-                ? Expanded(
-                  child: ListView.separated(
-                    itemCount: tasks.length,
-                    itemBuilder: (context, index) {
-                      return TaskItem(
-                        key: ValueKey(
-                          '$_currentDateSelected${tasks[index]['tittle']}',
-                        ),
-                        title: tasks[index]['title'],
-                        isDone: tasks[index]['isDone'],
-                        onEdit:
-                            (newValue) =>
-                                _updateTask(tasks[index]['id'], newValue),
-                        onDelete: () => _removeTask(tasks[index]['id']),
-                        onChangeState:
-                            () => _changeTaskState(tasks[index]['id']),
-                      );
-                    },
-                    separatorBuilder: (context, index) => SizedBox(height: 10),
-                  ),
-                )
-                : Center(child: Text("Aucune tâche")),
-
-            isFinishedTasksEmpty
-                ? Expanded(
-                  child: ListView.separated(
-                    itemCount: finishedTasks.length,
-                    itemBuilder: (context, index) {
-                      return TaskItem(
-                        key: ValueKey(
-                          '$_currentDateSelected${finishedTasks[index]['title']}',
-                        ),
-                        title: finishedTasks[index]['title'],
-                        isDone: finishedTasks[index]['isDone'],
-                        onEdit: (newValue) => _updateTask(index, newValue),
-                        onDelete: () => _removeTask(tasks[index]['id']),
-                        onChangeState: () => _changeTaskState(index),
-                      );
-                    },
-                    separatorBuilder: (context, index) => SizedBox(height: 10),
-                  ),
-                )
-                : Center(),
-          ],
-        ),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         elevation: 4,

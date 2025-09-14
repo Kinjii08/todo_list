@@ -59,7 +59,6 @@ class _TaskItemState extends State<TaskItem> {
 
   @override
   Widget build(BuildContext context) {
-    print(widget.title);
     return GestureDetector(
       onLongPress: () => {if (widget.isDone == false) _openEditDialog()},
       child: Card(

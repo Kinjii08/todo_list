@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:todo_list/models/task.dart';
 import 'package:todo_list/widgets/day.dart';
 
 class DaysList extends StatefulWidget {
-  final Map<String, dynamic> tasks;
+  final List<Task> tasks;
   final String selectedDate;
   final bool isCalendarSelection;
   final void Function(bool) onNotMiddle;
@@ -24,100 +25,86 @@ class DaysList extends StatefulWidget {
 }
 
 class DaysListState extends State<DaysList> {
-  late final List<Map<String, Map<String, Object>>> _days = [];
+  late final List<Map<String, dynamic>> _days = [];
   late ScrollController _controller;
   final itemKey = GlobalKey();
 
   @override
-  void didUpdateWidget(covariant DaysList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // print('tasks : ${widget.tasks}');
-    // if (oldWidget.tasks != widget.tasks) {
-    //   createDaysList(); // ça va utiliser la nouvelle valeur
-    // }
-    // if (oldWidget.selectedDate != widget.selectedDate &&
-    //     widget.isCalendarSelection) {
-    //   createDaysList();
-    //   initMiddleScroll();
-    // }
-    // if (oldWidget.selectedDate != widget.selectedDate &&
-    //     widget.selectedDate == DateFormat.yMd().format(DateTime.now())) {
-    //   createDaysList();
-    //   initMiddleScroll();
-    // }
-    //TODO: le probleme c'est que ça me casse mon scroll encore
-  }
-
-  @override
   void initState() {
     _controller = ScrollController();
+    createDaysList();
+    initMiddleScroll();
     super.initState();
   }
 
   void _listener() {
-    widget.onNotMiddle(false);
+    if ((_controller.position.pixels).floor() == (_getMiddle() - 5).floor()) {
+      widget.onNotMiddle(true);
+    } else {
+      widget.onNotMiddle(false);
+    }
   }
 
-  void createDaysList() {
-    print("tasks : ${widget.tasks}");
-    print("selected date : ${widget.selectedDate}");
-    // DateFormat format = DateFormat("M/d/yyyy"); // Mois/Jour/Année
-    // final DateTime now = format.parse(widget.selectedDate);
-    // DateTime twoWeeksBack = now.subtract(const Duration(days: 15));
+  void createDaysList([String? selectedDate]) {
+    final String dateToUse =
+        selectedDate ?? DateFormat.yMd().format(DateTime.now());
+    DateFormat format = DateFormat("M/d/yyyy"); // Mois/Jour/Année
+    final DateTime now = format.parse(dateToUse);
+    DateTime twoWeeksBack = now.subtract(const Duration(days: 15));
 
-    // final List<Map<String, Map<String, Object>>> newDays = [];
+    final List<Map<String, Map<String, Object>>> newDays = [];
 
-    // for (int i = 0; i <= 30; i++) {
-    //   DateTime nextDay = twoWeeksBack.add(Duration(days: i));
-    //   String weekDay = DateFormat('ccccc').format(nextDay);
-    //   String date = DateFormat.yMd().format(nextDay);
+    for (int i = 0; i <= 30; i++) {
+      DateTime nextDay = twoWeeksBack.add(Duration(days: i));
+      String weekDay = DateFormat('ccccc').format(nextDay);
+      String date = DateFormat.yMd().format(nextDay);
 
-    //   bool hasTasks = false;
-    //   bool hasFinishedTasks = false;
+      bool hasTasks = false;
+      bool hasFinishedTasks = false;
+      if (widget.tasks.any((t) => t.date == date)) {
+        if (widget.tasks.any((t) => !t.isDone)) {
+          hasTasks = true;
+        }
+        if (widget.tasks.any((t) => t.isDone)) {
+          hasFinishedTasks = true;
+        }
+      }
 
-    //   if (widget.tasks.containsKey(date)) {
-    //     if (widget.tasks[date]!["tasks"]!.isNotEmpty) {
-    //       hasTasks = true;
-    //     }
-    //     if (widget.tasks[date]!["finishedTasks"]!.isNotEmpty) {
-    //       hasFinishedTasks = true;
-    //     }
-    //   }
+      newDays.add({
+        date: {
+          "weekDay": weekDay,
+          "tasks": hasTasks,
+          "finishedTasks": hasFinishedTasks,
+        },
+      });
+    }
 
-    //   newDays.add({
-    //     date: {
-    //       "weekDay": weekDay,
-    //       "tasks": hasTasks,
-    //       "finishedTasks": hasFinishedTasks,
-    //     },
-    //   });
-    // }
-
-    // setState(() {
-    //   _days
-    //     ..clear()
-    //     ..addAll(newDays);
-    // });
+    setState(() {
+      _days
+        ..clear()
+        ..addAll(newDays);
+    });
+    // initMiddleScroll();
   }
 
   void initMiddleScroll() {
-    // _controller = ScrollController();
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   Future.delayed(Duration(milliseconds: 1500), () async {
-    //     if (_controller.hasClients) {
-    //       final middle = _getMiddle();
-    //       await _controller.animateTo(
-    //         middle,
-    //         duration: const Duration(milliseconds: 600),
-    //         curve: Curves.easeInOut,
-    //       );
-    //       _controller.addListener(_listener);
-    //     } else {
-    //       // Retry au prochain frame si pas encore prêt
-    //       Future.delayed(Duration(milliseconds: 50), initMiddleScroll);
-    //     }
-    //   });
-    // });
+    _controller = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 1300), () async {
+        if (_controller.hasClients) {
+          final middle = _getMiddle() - 5;
+          await _controller.animateTo(
+            middle,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeInOut,
+          );
+          _controller.addListener(_listener);
+        } else {
+          // Retry au prochain frame si pas encore prêt
+          Future.delayed(Duration(milliseconds: 50), initMiddleScroll);
+        }
+      });
+    });
   }
 
   double _getMiddle() {
@@ -125,36 +112,53 @@ class DaysListState extends State<DaysList> {
   }
 
   void scrollToMiddle() async {
-    //   _controller.removeListener(_listener);
-    //   await _controller.animateTo(
-    //     _getMiddle(),
-    //     duration: const Duration(milliseconds: 600),
-    //     curve: Curves.easeInOut,
-    //   );
-    //   setState(() {
-    //     widget.onSelectDate(DateFormat.yMd().format(DateTime.now()), false);
-    //   });
-    //   _controller.addListener(_listener);
-    // }
+    _controller.removeListener(_listener);
+    await _controller.animateTo(
+      _getMiddle() - 5,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+    );
+    widget.onSelectDate(DateFormat.yMd().format(DateTime.now()), false);
+    _controller.addListener(_listener);
+  }
 
-    // Future _scrollToSelectedDate() async {
-    //   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    //     final context = itemKey.currentContext;
-    //     if (context != null) {
-    //       await Scrollable.ensureVisible(
-    //         context,
-    //         alignment: 0.5,
-    //         duration: Duration(seconds: 1),
-    //       );
-    //     }
-    //   });
+  Future _scrollToSelectedDate() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final context = itemKey.currentContext;
+      if (context != null) {
+        await Scrollable.ensureVisible(
+          context,
+          alignment: 0.5,
+          duration: Duration(seconds: 1),
+        );
+      }
+    });
+  }
+
+  void updateDaysWithTasks() {
+    for (var day in _days) {
+      final dateKey = day.keys.first;
+      final dayData = day[dateKey]!;
+
+      if (widget.tasks.any((t) => t.date == dateKey)) {
+        final hasUnfinishedTasks = widget.tasks.any(
+          (t) => !t.isDone && t.date == dateKey,
+        );
+        final hasFinishedTasks = widget.tasks.any(
+          (t) => t.isDone && t.date == dateKey,
+        );
+        dayData['tasks'] = hasUnfinishedTasks;
+        dayData['finishedTasks'] = hasFinishedTasks;
+      } else {
+        dayData['tasks'] = false;
+        dayData['finishedTasks'] = false;
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    createDaysList();
-    // initMiddleScroll();
-    // print("🔄 Week.build() avec tasks = ${widget.tasks}");
+    updateDaysWithTasks();
     return SizedBox(
       height: 100,
       child: ListView.separated(
@@ -171,7 +175,7 @@ class DaysListState extends State<DaysList> {
             onTap:
                 () => {
                   widget.onSelectDate(newKey, false),
-                  // _scrollToSelectedDate(),
+                  _scrollToSelectedDate(),
                 },
 
             child: Day(

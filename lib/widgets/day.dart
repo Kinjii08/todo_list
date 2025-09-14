@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:todo_list/widgets/notification_tasks.dart';
 
 class Day extends StatefulWidget {
-  final Map<String, Map<String, Object>> day;
+  final Map<String, dynamic> day;
   final bool isSelected;
   const Day({super.key, required this.day, required this.isSelected});
 
@@ -11,24 +11,19 @@ class Day extends StatefulWidget {
 }
 
 class _DayState extends State<Day> {
-  @override
-  void didUpdateWidget(covariant Day oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.day != widget.day) {}
-  }
-
+  String newKey = "";
+  Map<String, Object> newValue = {};
   String _displayDay(String date) {
     return date.split('/')[1];
   }
 
   @override
   Widget build(BuildContext context) {
-    String newKey = "";
-    Map<String, Object> newValue = {};
     widget.day.forEach((key, value) {
-      newKey = key;
-      newValue = value;
+      setState(() {
+        newKey = key;
+        newValue = value;
+      });
     });
     return SizedBox(
       width: 22.0,
