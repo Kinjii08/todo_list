@@ -128,7 +128,6 @@ class _TodoScreenState extends State<TodoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: Drawer(),
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.surface,
         scrolledUnderElevation: 0.0,
@@ -248,7 +247,7 @@ class _TodoScreenState extends State<TodoScreen> {
                             (context, index) => SizedBox(height: 10),
                       ),
                     )
-                    : Center(child: Text("Aucune tâche")),
+                    : Center(child: Text("No tasks")),
 
                 finishedTasksList.isNotEmpty
                     ? Text("Finished tasks")
